@@ -1,14 +1,12 @@
 import sys
 import os
 import re
+import ast
 from compiler.ast import flatten
 import urllib2
 import json
 from time import time as tm
 import numpy
-
-
-
 
 def get_id(username, access_token):
     try:       
@@ -204,19 +202,89 @@ def classify_followers_semantically(username, stop_value=None, access_token=None
                         vectorizer = CountVectorizer(min_df=1)
                         X = vectorizer.fit_transform(map(str, map(specials, [filter(lambda x: x in string.printable, s) for s in [b['bio'] for b in followers_data]])))
                     except:
-                        print "everybody failed"
+                        print "every measure failed..exit"
+                        sys.exit()
         k = 5
         neighbors = NearestNeighbors(n_neighbors=k, algorithm='brute').fit(X.toarray())
-        
-        #distances, indices = neighbors.kneighbors(X.toarray())
         
         for a, b in zip(X.toarray(), range(0, len(X.toarray()))):
             distances, indices = neighbors.kneighbors(a)
             classified.append({'related': [t['username'] for t in followers_data[flatten(indices)] if t['username'] != followers_data[b]['username'] ], 'username': followers_data[b]['username']})
-            
-        
+                
         return classified
     except ImportError, e:
         print "please install scikit-learn from http://scikit-learn.org/ to utilize this method.."
 
 
+def classify_followings_semantically(username, stop_value=None, access_token=None):
+    try:
+        import string
+        from sklearn.neighbors import NearestNeighbors
+        from sklearn.feature_extraction.text import CountVectorizer
+
+        classified = []
+
+        non_zero = lambda x: len(x['bio']) > 3
+        specials = lambda x: re.sub('[^A-Za-z0-9]+',' ', x)
+        
+        follows_data = numpy.array(filter(non_zero, get_follows(username, 'user_and_bio')))
+        try:
+            vectorizer = CountVectorizer(min_df=4)
+            X = vectorizer.fit_transform(map(str, map(specials, [filter(lambda x: x in string.printable, s) for s in [b['bio'] for b in follows_data]])))
+        except:
+            try:
+                vectorizer = CountVectorizer(min_df=3)
+                X = vectorizer.fit_transform(map(str, map(specials, [filter(lambda x: x in string.printable, s) for s in [b['bio'] for b in follows_data]])))
+            except:
+                try:
+                    vectorizer = CountVectorizer(min_df=2)
+                    X = vectorizer.fit_transform(map(str, map(specials, [filter(lambda x: x in string.printable, s) for s in [b['bio'] for b in follows_data]])))
+                except:
+                    try:
+                        vectorizer = CountVectorizer(min_df=1)
+                        X = vectorizer.fit_transform(map(str, map(specials, [filter(lambda x: x in string.printable, s) for s in [b['bio'] for b in follows_data]])))
+                    except:
+                        print "every measure failed..exiting"
+                        sys.exit()
+        k = 5
+        neighbors = NearestNeighbors(n_neighbors=k, algorithm='brute').fit(X.toarray())
+        
+        for a, b in zip(X.toarray(), range(0, len(X.toarray()))):
+            distances, indices = neighbors.kneighbors(a)
+            classified.append({'related': [t['username'] for t in follows_data[flatten(indices)] if t['username'] != follows_data[b]['username'] ], 'username': follows_data[b]['username']})
+                
+        return classified
+    except ImportError, e:
+        print "please install scikit-learn from http://scikit-learn.org/ to utilize this method.."
+
+
+def cluster_followers_sentiments(username, stop_value=None, access_token=None):
+    try:
+        from textblob import TextBlob
+        from scipy.cluster import vq
+        import numpy
+        
+        non_zero = lambda x: len(x['bio']) > 3
+        specials = lambda x: re.sub('[^A-Za-z0-9]+',' ', x)
+        whiten = lambda obs: obs/numpy.std(obs)
+        
+        grouped = []
+
+        t = [{'username': a['username'],
+                'bio': a['bio'],
+                'sentiment': [a for a in TextBlob(a['bio']).sentiment]} for a in numpy.array(filter(non_zero, get_follows(username, 'user_and_bio')))]
+        
+        centers, dist = vq.kmeans(numpy.array([[a['sentiment'][0], a['sentiment'][1]] for a in t]), whiten(numpy.array([[a['sentiment'][0], a['sentiment'][1]] for a in t])), 100)
+        code, distance = vq.vq(numpy.array([[a['sentiment'][0], a['sentiment'][1]] for a in t]), centers)
+        
+        for i in range(0, len(centers)):
+            grouped.append({'centroid': {'polarity': list(map(float, centers[i]))[0], 'subjectivity': list(map(float, centers[i]))[1]},
+                              'cluster': list(numpy.array([{'polarity': a['sentiment'][0], 'subjectivity': a['sentiment'][1], 'username': a['username']} for a in t])[code==i])})
+        
+        centers = sorted([list([int(b) for b in a]) for a in centers])
+        
+        return grouped, centers
+    except Exception, e:
+        print str(e)
+        
+        
