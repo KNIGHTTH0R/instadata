@@ -221,7 +221,7 @@ def classify_followings_semantically(username, stop_value=None, access_token=Non
         import string
         from sklearn.neighbors import NearestNeighbors
         from sklearn.feature_extraction.text import CountVectorizer
-
+        
         classified = []
 
         non_zero = lambda x: len(x['bio']) > 3
@@ -273,6 +273,37 @@ def cluster_followers_sentiments(username, stop_value=None, access_token=None):
         t = [{'username': a['username'],
                 'bio': a['bio'],
                 'sentiment': [a for a in TextBlob(a['bio']).sentiment]} for a in numpy.array(filter(non_zero, get_follows(username, 'user_and_bio')))]
+        
+        centers, dist = vq.kmeans(numpy.array([[a['sentiment'][0], a['sentiment'][1]] for a in t]), whiten(numpy.array([[a['sentiment'][0], a['sentiment'][1]] for a in t])), 100)
+        code, distance = vq.vq(numpy.array([[a['sentiment'][0], a['sentiment'][1]] for a in t]), centers)
+        
+        for i in range(0, len(centers)):
+            grouped.append({'centroid': {'polarity': list(map(float, centers[i]))[0], 'subjectivity': list(map(float, centers[i]))[1]},
+                              'cluster': list(numpy.array([{'polarity': a['sentiment'][0], 'subjectivity': a['sentiment'][1], 'username': a['username']} for a in t])[code==i])})
+        
+        centers = sorted([list([int(b) for b in a]) for a in centers])
+        
+        return grouped, centers
+    except Exception, e:
+        print str(e)
+
+
+def cluster_followings_sentiments(username, stop_value=None, access_token=None):
+    try:
+        from textblob import TextBlob
+        from scipy.cluster import vq
+        import numpy
+        
+        non_zero = lambda x: len(x['bio']) > 3
+        specials = lambda x: re.sub('[^A-Za-z0-9]+',' ', x)
+        whiten = lambda obs: obs/numpy.std(obs)
+        normalize = lambda _n: _n * 100
+        
+        grouped = []
+
+        t = [{'username': a['username'],
+                'bio': a['bio'],
+                'sentiment': map(normalize, [a for a in TextBlob(a['bio']).sentiment])} for a in numpy.array(filter(non_zero, get_followers(username, 'user_and_bio')))]
         
         centers, dist = vq.kmeans(numpy.array([[a['sentiment'][0], a['sentiment'][1]] for a in t]), whiten(numpy.array([[a['sentiment'][0], a['sentiment'][1]] for a in t])), 100)
         code, distance = vq.vq(numpy.array([[a['sentiment'][0], a['sentiment'][1]] for a in t]), centers)
