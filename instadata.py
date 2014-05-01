@@ -1,3 +1,4 @@
+from __future__ import division
 import sys
 import os
 import re
@@ -22,7 +23,7 @@ def get_id(username, access_token):
 
 def followers_crawler(_id, y, counter, stop_value, access_token, url=None):
     try:
-        stop_value = 2000
+        stop_value = 30
         if counter > stop_value:
             return y
         else:
@@ -53,7 +54,7 @@ def followers_crawler(_id, y, counter, stop_value, access_token, url=None):
 def follows_crawler(_id, y, counter, stop_value, access_token, url=None):
     
     try:
-        stop_value = 2000
+        stop_value = 30
         if counter > stop_value:
             return y
         else:
@@ -175,20 +176,27 @@ def tokenize_all(bios):
 
 
 def classify_followers_semantically(username, stop_value=None, access_token=None):
+    """Returns a list of all the followers of a users classified according to their bios"""
     try:
         import string
         from sklearn.neighbors import NearestNeighbors
         from sklearn.feature_extraction.text import CountVectorizer
+        
+        specials = lambda x: re.sub('[^A-Za-z0-9]+',' ', x)
+        non_empty = lambda x: x if x != ' ' else ''
+        filter_crap = lambda x: {'username': x['username'], 'bio': map(non_empty, re.sub(r'[^\x00-\x7f]',r' ', re.sub('[^A-Za-z0-9]+', ' ', x['bio'])).encode('utf-8').strip(' \t\n\r').split())}
+        non_zero = lambda x: len(x['bio']) > 3
+        joiner = lambda x: {'username': x['username'], 'bio': ' '.join(x['bio'])}
 
         classified = []
-
-        non_zero = lambda x: len(x['bio']) > 3
-        specials = lambda x: re.sub('[^A-Za-z0-9]+',' ', x)
         
-        followers_data = numpy.array(filter(non_zero, get_followers(username, 'user_and_bio')))
+        followers_data = numpy.array(map(joiner, filter(non_zero, map(filter_crap, get_followers(username, 'user_and_bio')))))
+        
         try:
             vectorizer = CountVectorizer(min_df=4)
+            
             X = vectorizer.fit_transform(map(str, map(specials, [filter(lambda x: x in string.printable, s) for s in [b['bio'] for b in followers_data]])))
+            print "yoohoo"
         except:
             try:
                 vectorizer = CountVectorizer(min_df=3)
@@ -204,30 +212,40 @@ def classify_followers_semantically(username, stop_value=None, access_token=None
                     except:
                         print "every measure failed..exit"
                         sys.exit()
-        k = 5
-        neighbors = NearestNeighbors(n_neighbors=k, algorithm='brute').fit(X.toarray())
+
+        if len(X.toarray()) >= 5:
+            k = 5
+        else:
+            k = len(X.toarray())
+        
+        neighbors = NearestNeighbors(n_neighbors=k, algorithm='ball_tree').fit(X.toarray())
         
         for a, b in zip(X.toarray(), range(0, len(X.toarray()))):
             distances, indices = neighbors.kneighbors(a)
             classified.append({'related': [t['username'] for t in followers_data[flatten(indices)] if t['username'] != followers_data[b]['username'] ], 'username': followers_data[b]['username']})
-                
+        
         return classified
     except ImportError, e:
         print "please install scikit-learn from http://scikit-learn.org/ to utilize this method.."
 
 
 def classify_followings_semantically(username, stop_value=None, access_token=None):
+    """Returns a list of all the followings of a users classified according to their bios"""
     try:
         import string
         from sklearn.neighbors import NearestNeighbors
         from sklearn.feature_extraction.text import CountVectorizer
-        
-        classified = []
 
-        non_zero = lambda x: len(x['bio']) > 3
         specials = lambda x: re.sub('[^A-Za-z0-9]+',' ', x)
+        non_empty = lambda x: x if x != ' ' else ''
+        filter_crap = lambda x: {'username': x['username'], 'bio': map(non_empty, re.sub(r'[^\x00-\x7f]',r' ', re.sub('[^A-Za-z0-9]+', ' ', x['bio'])).encode('utf-8').strip(' \t\n\r').split())}
+        non_zero = lambda x: len(x['bio']) > 3
+        joiner = lambda x: {'username': x['username'], 'bio': ' '.join(x['bio'])}
+
+        classified = []
         
-        follows_data = numpy.array(filter(non_zero, get_follows(username, 'user_and_bio')))
+        follows_data = numpy.array(map(joiner, filter(non_zero, map(filter_crap, get_follows(username, 'user_and_bio')))))
+        
         try:
             vectorizer = CountVectorizer(min_df=4)
             X = vectorizer.fit_transform(map(str, map(specials, [filter(lambda x: x in string.printable, s) for s in [b['bio'] for b in follows_data]])))
@@ -246,33 +264,66 @@ def classify_followings_semantically(username, stop_value=None, access_token=Non
                     except:
                         print "every measure failed..exiting"
                         sys.exit()
-        k = 5
+        
+        if len(X.toarray()) >= 5:
+            k = 5
+        else:
+            k = len(X.toarray())
+        
         neighbors = NearestNeighbors(n_neighbors=k, algorithm='brute').fit(X.toarray())
         
         for a, b in zip(X.toarray(), range(0, len(X.toarray()))):
             distances, indices = neighbors.kneighbors(a)
             classified.append({'related': [t['username'] for t in follows_data[flatten(indices)] if t['username'] != follows_data[b]['username'] ], 'username': follows_data[b]['username']})
-                
+                        
         return classified
     except ImportError, e:
         print "please install scikit-learn from http://scikit-learn.org/ to utilize this method.."
 
 
+
+def clf2(username, stop_value=None, access_token=None):
+    try:
+        import re
+        non_empty = lambda x: x if x != ' ' else ''
+        filter_crap = lambda x: {'username': x['username'], 'bio': map(non_empty, re.sub(r'[^\x00-\x7f]',r' ', re.sub('[^A-Za-z0-9]+', ' ', x['bio'])).encode('utf-8').strip(' \t\n\r').split())}
+        non_zero = lambda x: len(x['bio']) > 3
+        joiner = lambda x: {'username': x['username'], 'bio': ' '.join(x['bio'])}
+        
+        followers_data = numpy.array(map(joiner, filter(non_zero, map(filter_crap, get_followers(username, 'user_and_bio')))))
+        
+        return followers_data
+        
+    except Exception, e:
+        print str(e)
+
+#--here we normalize using a z-score        
+def normalize(sentiment):
+    sentiment -= numpy.mean(sentiment, axis=0)
+    sentiment /= numpy.std(sentiment, axis=0)
+    return sentiment
+
+
 def cluster_followers_sentiments(username, stop_value=None, access_token=None):
+    """Returns a list of all the followers of a users clustered according to the sentiment reflected in their bios"""
     try:
         from textblob import TextBlob
         from scipy.cluster import vq
         import numpy
-        
+
+        non_empty = lambda x: x if x != ' ' else ''
+        filter_crap = lambda x: {'username': x['username'], 'bio': map(non_empty, re.sub(r'[^\x00-\x7f]',r' ', re.sub('[^A-Za-z0-9]+', ' ', x['bio'])).encode('utf-8').strip(' \t\n\r').split())}
         non_zero = lambda x: len(x['bio']) > 3
-        specials = lambda x: re.sub('[^A-Za-z0-9]+',' ', x)
+        joiner = lambda x: {'username': x['username'], 'bio': ' '.join(x['bio'])}
         whiten = lambda obs: obs/numpy.std(obs)
+
+        followers_data = numpy.array(map(joiner, filter(non_zero, map(filter_crap, get_followers(username, 'user_and_bio')))))
         
         grouped = []
 
         t = [{'username': a['username'],
                 'bio': a['bio'],
-                'sentiment': [a for a in TextBlob(a['bio']).sentiment]} for a in numpy.array(filter(non_zero, get_follows(username, 'user_and_bio')))]
+                'sentiment': [float(a) for a in TextBlob(a['bio']).sentiment]} for a in followers_data]
         
         centers, dist = vq.kmeans(numpy.array([[a['sentiment'][0], a['sentiment'][1]] for a in t]), whiten(numpy.array([[a['sentiment'][0], a['sentiment'][1]] for a in t])), 100)
         code, distance = vq.vq(numpy.array([[a['sentiment'][0], a['sentiment'][1]] for a in t]), centers)
@@ -281,29 +332,35 @@ def cluster_followers_sentiments(username, stop_value=None, access_token=None):
             grouped.append({'centroid': {'polarity': list(map(float, centers[i]))[0], 'subjectivity': list(map(float, centers[i]))[1]},
                               'cluster': list(numpy.array([{'polarity': a['sentiment'][0], 'subjectivity': a['sentiment'][1], 'username': a['username']} for a in t])[code==i])})
         
-        centers = sorted([list([int(b) for b in a]) for a in centers])
+        centers = sorted([list([float(b) for b in a]) for a in centers])
         
         return grouped, centers
+                
+        return t
     except Exception, e:
         print str(e)
 
 
 def cluster_followings_sentiments(username, stop_value=None, access_token=None):
+    """Returns a list of all the followings of a users clustered according to the sentiment reflected in their bios"""
     try:
         from textblob import TextBlob
         from scipy.cluster import vq
         import numpy
         
+        non_empty = lambda x: x if x != ' ' else ''
+        filter_crap = lambda x: {'username': x['username'], 'bio': map(non_empty, re.sub(r'[^\x00-\x7f]',r' ', re.sub('[^A-Za-z0-9]+', ' ', x['bio'])).encode('utf-8').strip(' \t\n\r').split())}
         non_zero = lambda x: len(x['bio']) > 3
-        specials = lambda x: re.sub('[^A-Za-z0-9]+',' ', x)
+        joiner = lambda x: {'username': x['username'], 'bio': ' '.join(x['bio'])}
         whiten = lambda obs: obs/numpy.std(obs)
-        normalize = lambda _n: _n * 100
         
+        follows_data = numpy.array(map(joiner, filter(non_zero, map(filter_crap, get_follows(username, 'user_and_bio')))))
+ 
         grouped = []
-
+        
         t = [{'username': a['username'],
                 'bio': a['bio'],
-                'sentiment': map(normalize, [a for a in TextBlob(a['bio']).sentiment])} for a in numpy.array(filter(non_zero, get_followers(username, 'user_and_bio')))]
+                'sentiment': [float(a) for a in TextBlob(a['bio']).sentiment]} for a in follows_data]
         
         centers, dist = vq.kmeans(numpy.array([[a['sentiment'][0], a['sentiment'][1]] for a in t]), whiten(numpy.array([[a['sentiment'][0], a['sentiment'][1]] for a in t])), 100)
         code, distance = vq.vq(numpy.array([[a['sentiment'][0], a['sentiment'][1]] for a in t]), centers)
@@ -312,10 +369,13 @@ def cluster_followings_sentiments(username, stop_value=None, access_token=None):
             grouped.append({'centroid': {'polarity': list(map(float, centers[i]))[0], 'subjectivity': list(map(float, centers[i]))[1]},
                               'cluster': list(numpy.array([{'polarity': a['sentiment'][0], 'subjectivity': a['sentiment'][1], 'username': a['username']} for a in t])[code==i])})
         
-        centers = sorted([list([int(b) for b in a]) for a in centers])
+        centers = sorted([list([float(b) for b in a]) for a in centers])
         
         return grouped, centers
     except Exception, e:
         print str(e)
+
+
+
         
         
