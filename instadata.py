@@ -305,7 +305,7 @@ def normalize(sentiment):
 
 
 def cluster_followers_sentiments(username, stop_value=None, access_token=None):
-    """Returns a list of all the followers of a users clustered according to the sentiment reflected in their bios"""
+    """Returns group and their respective centroids for the followers of a users clustered according to the sentiment reflected in their bios"""
     try:
         from textblob import TextBlob
         from scipy.cluster import vq
@@ -342,7 +342,7 @@ def cluster_followers_sentiments(username, stop_value=None, access_token=None):
 
 
 def cluster_followings_sentiments(username, stop_value=None, access_token=None):
-    """Returns a list of all the followings of a users clustered according to the sentiment reflected in their bios"""
+    """Returns groups and their respective centroids for the followings of a users clustered according to the sentiment reflected in their bios"""
     try:
         from textblob import TextBlob
         from scipy.cluster import vq
